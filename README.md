@@ -76,4 +76,4 @@ Future work may include multi-user authorization, ticket mutations, assets and r
 
 ## License
 
-Operator selection pending: MIT, Apache-2.0, or AGPL-3.0. This candidate has no permission-granting LICENSE yet and must not be presented as open source until one is selected. n8n and other dependencies retain their own licenses; Relay's eventual license does not relicense them.
+Relay is licensed under [Apache-2.0](LICENSE). n8n and other dependencies retain their own licenses; Relay's license does not relicense them.

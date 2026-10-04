@@ -83,13 +83,11 @@ Configure your own secrets and URL-encoded reader connection string. Create n8n 
 
 ## K. License
 
-No license was selected or added. Recommend **Apache-2.0** for permissive reuse with an explicit patent grant. **MIT** offers concise permissive terms. **AGPL-3.0** requires source availability for qualifying modified network-served versions. Operator choice is required before LICENSE is created and the package is presented as open source. n8n and other dependency licenses remain independent.
-
-License references: [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0), [MIT](https://opensource.org/license/mit), [AGPL-3.0](https://opensource.org/license/agpl-3.0).
+The operator selected Apache-2.0. The canonical Apache text is included unchanged in LICENSE; package metadata and README agree. Dependency licenses remain independent.
 
 ## L. Remaining concerns
 
-Original history unavailable; license pending; real credential/provider acceptance untested; single-reader Basic Auth needs HTTPS and deployment-specific access controls; transcripts/backups retain personal information beyond audio purge; uncertain sends require explicit reconciliation. No complete identity/multi-user authorization exists. Formatter/linter policy and image-level vulnerability audit are deferred and transparently reported. None of these justify touching production data or rotating credentials without approval.
+Intentional sanitized release history; real credential/provider acceptance untested; single-reader Basic Auth needs HTTPS and deployment-specific access controls; transcripts/backups retain personal information beyond audio purge; uncertain sends require explicit reconciliation. No complete identity/multi-user authorization exists. Formatter/linter policy and image-level vulnerability audit are deferred and transparently reported. None of these justify touching production data or rotating credentials without approval.
 
 ## M. Files that must not be committed
 
@@ -101,4 +99,4 @@ Name: **relay**. About: **Self-hosted AI-assisted IT ticket intake with Telegram
 
 ## O. GO / NO-GO
 
-**NO-GO for public GitHub push.** Local packaging, fresh installation, inactive imports, backend tests and restore rehearsals passed. Resolve license selection, historical provenance/audit and manual provider acceptance, review the remaining deployment controls, and obtain explicit publication authorization. No workflow execution, activation, deletion, production DB mutation, credential rotation, release tag or public push occurred in this sprint.
+**NO-GO for public GitHub push.** Local packaging, fresh installation, inactive imports, backend tests and restore rehearsals passed. Complete manual provider acceptance, review the remaining deployment controls, and obtain explicit publication authorization. No workflow execution, activation, deletion, production DB mutation, credential rotation, release tag or public push occurred in this sprint.
