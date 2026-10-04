@@ -29,7 +29,7 @@ The console reads actual database projections; it has no runtime demo fallback. 
 Requirements: Docker Engine/Desktop with Compose v2, Node.js 22.15 or later, a Telegram bot, a Groq account, and HTTPS ingress for a production webhook.
 
 ```sh
-git clone <your-reviewed-repository-url> relay
+git clone https://github.com/aminewe898/relay.git relay
 cd relay
 cp .env.example .env
 # Configure distinct local secrets and the reader URL; see docs/configuration.md.
