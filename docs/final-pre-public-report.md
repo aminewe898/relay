@@ -26,3 +26,6 @@ Use [manual acceptance](manual-acceptance.md) for the outstanding live test. Kee
 ## Remaining-gate follow-up
 
 Only remaining gates were revisited. Authenticated repository GraphQL reports zero associated packages: PASS. Clean packaged acceptance deployment prepared from the pushed release with synthetic local secrets, six inactive imports and no provider requests; operator configuration/publication/voice test pending. Original ignored rehearsal-artifact deletion again rejected by tool policy; absence not claimed. Private vulnerability reporting returns 404 while private and is documented by GitHub as a public-repository feature; enable/verify at the separately authorized visibility-change step. SECURITY.md corrects the former impossible pre-visibility ordering. No production access, functionality/workflow/migration/dependency change or expensive repeat suite. PUBLIC RELEASE READY: NO.
+
+
+Operator follow-up: old rehearsal audit directory absence verified; local cleanup gate PASS. Repository remains private, associated packages count zero. Prepared acceptance database still has zero processed messages/intakes/work items/tickets/outbox/interactions; six workflows remain inactive with no credential bindings. Fresh acceptance has not been evidenced in this deployment. Await operator clarification; no execution or production access performed.

@@ -16,7 +16,7 @@ Checked 2026-10-04. See [final report](final-pre-public-report.md) and [manual a
 | Retention / maintenance | PASS | 72h audio hard TTL, 1h success grace, 48h interaction expiry, batch 50 bounded; preserved transcripts/extractions documented and backend tests pass. |
 | Application backup / restore | PASS | Packaged tooling; fresh restore matches six ledger entries, fixture count, zero tickets, three required functions and role restrictions. |
 | Rehearsal container / volume cleanup | PASS | Only newly created disposable projects removed; labels checked, no remaining associated containers/volumes. |
-| Local rehearsal files cleanup | REQUIRES OPERATOR ACTION | Tool policy rejected local deletion; ignored clone contains synthetic environment/backups/logs, never committed. Remove it manually. |
+| Local rehearsal files cleanup | PASS | Operator removed the exact old rehearsal audit directory; Test-Path confirms it absent. New acceptance deployment retained. |
 | Historical controlled provider acceptance | PASS | Private report and persisted proof: one voice/reply/intake/ticket, sent confirmation, stages successful, no duplicates/leases/uncertain sends. |
 | Fresh packaged Telegram/Groq acceptance | REQUIRES OPERATOR ACTION | Clean packaged acceptance deployment prepared with six inactive imports and no provider requests. Awaiting operator credentials, HTTPS callback, manual publication and synthetic voice/reply; production untouched. |
 | npm vulnerability audit | PASS | Root/frontend zero known vulnerabilities, including high/critical. |
@@ -31,4 +31,4 @@ Checked 2026-10-04. See [final report](final-pre-public-report.md) and [manual a
 | GitHub Packages enumeration | PASS | Authenticated repository GraphQL packages.totalCount = 0; count-only query succeeds without broader permissions. |
 | Public visibility / v1.0.0 tag / GitHub Release | REQUIRES OPERATOR ACTION | Intentionally not performed; explicit operator GO required after blocking gates. |
 
-PUBLIC RELEASE READY: NO. Fresh packaged provider acceptance remains an outstanding blocking gate; local artifact cleanup and vulnerability reporting require operator action. Package absence is verified. Public authorization is the intentional final stop, not an implementation failure.
+PUBLIC RELEASE READY: NO. Fresh packaged provider acceptance remains an outstanding blocking gate; vulnerability reporting remains pending the separately authorized publication step. Artifact cleanup and package absence are verified. Public authorization is the intentional final stop, not an implementation failure.
