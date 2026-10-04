@@ -1,0 +1,54 @@
+{
+  "name": "TI-00 Configuration",
+  "nodes": [
+    {
+      "id": "ti00-trigger",
+      "name": "Configuration Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "ti00-config",
+      "name": "Validated Nonsecret Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const config = {\n  configVersion: '1.0.0',\n  botId: '',\n  botUsername: '',\n  operatorUserId: '',\n  operatorChatId: '',\n  ingressPolicy: {\n    expectedUpdateType: 'message',\n    requirePrivateChat: true,\n    requireHumanSender: true,\n    supportedKinds: ['voice', 'text'],\n    maxTextCharacters: 8000,\n    maxFileIdCharacters: 1024,\n    maxFileUniqueIdCharacters: 256,\n    maxSanitizedMessageBytes: 32768\n  },\n  retryPolicy: { stageMaxAttempts: 5, blindWriteRetries: false },\n  priorityPolicy: { unknownDefault: 'normal', criticalRequiresConfirmation: true },\n  phase: '1B'\n};\nconst positiveId = value => typeof value === 'string' && /^[1-9][0-9]{0,14}$/.test(value) && Number.isSafeInteger(Number(value));\nif (!config.configVersion || !config.botUsername ||\n    !positiveId(config.botId) || !positiveId(config.operatorUserId) || !positiveId(config.operatorChatId) ||\n    config.ingressPolicy.expectedUpdateType !== 'message' ||\n    config.ingressPolicy.requirePrivateChat !== true || config.ingressPolicy.requireHumanSender !== true ||\n    JSON.stringify(config.ingressPolicy.supportedKinds) !== JSON.stringify(['voice', 'text']) ||\n    !Number.isInteger(config.retryPolicy.stageMaxAttempts) ||\n    config.retryPolicy.stageMaxAttempts < 1 || config.retryPolicy.stageMaxAttempts > 20 ||\n    config.retryPolicy.blindWriteRetries !== false) {\n  throw new Error('Required ticket intake configuration is missing or invalid');\n}\nreturn [{ json: config }];"
+      }
+    }
+  ],
+  "connections": {
+    "Configuration Input": {
+      "main": [
+        [
+          {
+            "node": "Validated Nonsecret Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": false,
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "timezone": "Europe/Madrid",
+    "executionOrder": "v1"
+  },
+  "active": false
+}

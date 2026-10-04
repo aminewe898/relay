@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Generated dependency/build artifacts and private local audit output"
+paths = ['(^|[\\/])(node_modules|\.next|dist|coverage|audit-local|__pycache__)([\\/]|$)']

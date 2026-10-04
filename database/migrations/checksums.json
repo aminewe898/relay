@@ -1,0 +1,8 @@
+{
+  "001_schema.sql": "e46697eda8160a060fc740fadd54ecf8997dc7dbaf85dd4c693c405879e33fb8",
+  "002_phase1_operations.sql": "01f1e43cc93515a8d4ea083c62d91d081c2aff5bf23380721104b86173ed459c",
+  "003_grants.sql": "1ce1a06b91abe1a339e5405550d0ec0252a629e94693a3a37112a394fa48535a",
+  "004_phase2a_worker.proposed.sql": "7609cf7df21b164d2a40791793d06d8e906375f9008393c8506cf98bdc83bc08",
+  "005_v1_completion.sql": "81569491dce0d4965b5585e3a8fbaa45273602b5a489c397ffeadcc9c3bde959",
+  "006_backend_hardening.sql": "7bed2fe53df58bb76c048b28ba8259aa92af7b37e3e2a68df08df876be36de26"
+}

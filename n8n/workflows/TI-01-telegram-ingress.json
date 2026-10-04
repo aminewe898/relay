@@ -1,0 +1,323 @@
+{
+  "name": "TI-01 Telegram Ingress",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "relay-telegram-ingress",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ti01-webhook",
+      "name": "Telegram POST Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ignore = () => [{json: {eligible: false} }];\nconst object = value => value !== null && typeof value === 'object' && !Array.isArray(value);\nconst id = (value, zero = false) => Number.isSafeInteger(value) && value >= (zero ? 0 : 1) && value <= 999999999999999 ? String(value) : null;\nconst body = $input.first().json.body;\nif (!object(body) || Object.keys(body).some(k => !['update_id', 'message'].includes(k)) ||\n    !object(body.message) || !id(body.update_id, true)) return ignore();\nconst m = body.message;\nif (!object(m.from) || !object(m.chat) || !id(m.from.id) || !id(m.chat.id) ||\n    !id(m.message_id) || m.chat.type !== 'private' || m.from.is_bot !== false ||\n    !Number.isSafeInteger(m.date) || m.date < 1 || m.date > 253402300799) return ignore();\nif (['photo','audio','document','video','video_note','animation','sticker','contact','location','venue','poll','dice','game','paid_media','caption'].some(k => m[k] !== undefined)) return ignore();\nlet kind, message;\nif (object(m.voice) && m.text === undefined) {\n  const v = m.voice;\n  if (typeof v.file_id !== 'string' || !v.file_id.trim() || v.file_id.length > 1024 ||\n      typeof v.file_unique_id !== 'string' || !v.file_unique_id.trim() || v.file_unique_id.length > 256 ||\n      !Number.isInteger(v.duration) || v.duration < 0 || v.duration > 2147483647) return ignore();\n  message = {fileId: v.file_id, fileUniqueId: v.file_unique_id, durationSeconds: v.duration};\n  if (v.mime_type !== undefined) {\n    if (typeof v.mime_type !== 'string' || v.mime_type.length > 200) return ignore();\n    message.mimeType = v.mime_type;\n  }\n  if (v.file_size !== undefined) {\n    if (!id(v.file_size, true)) return ignore();\n    message.sizeBytes = v.file_size;\n  }\n  kind = 'voice';\n} else if (typeof m.text === 'string' && m.voice === undefined) {\n  if (!m.text.trim() || m.text.length > 16000 || Array.from(m.text.trim()).length > 8000) return ignore();\n  message = {text: m.text};\n  if (m.reply_to_message !== undefined) {\n    if (!object(m.reply_to_message) || !id(m.reply_to_message.message_id)) return ignore();\n    message.replyToMessageId = m.reply_to_message.message_id;\n  }\n  kind = 'text';\n} else return ignore();\nmessage.sentAt = new Date(m.date * 1000).toISOString();\nconst serialized = JSON.stringify(message);\nlet bytes = 0;\nfor (const ch of serialized) { const cp = ch.codePointAt(0); bytes += cp <= 127 ? 1 : cp <= 2047 ? 2 : cp <= 65535 ? 3 : 4; }\nif (bytes > 32768 || serialized.includes('\\\\u0000')) return ignore();\nreturn [{json: {\n  eligible: true, updateId: id(body.update_id, true), operatorUserId: id(m.from.id),\n  chatId: id(m.chat.id), messageId: id(m.message_id), chatType: 'private',\n  senderIsBot: false, kind, message, messageBytes: bytes\n} }];"
+      },
+      "id": "ti01-sanitize",
+      "name": "Sanitize Telegram Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "ti01-config",
+      "name": "Load TI-00 Configuration",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        480,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const config = $input.first().json;\nconst envelope = $('Sanitize Telegram Update').first().json;\nconst positive = v => typeof v === 'string' && /^[1-9][0-9]{0,14}$/.test(v) && Number.isSafeInteger(Number(v));\nif (!config.configVersion || !positive(config.botId) || !positive(config.operatorUserId) ||\n    !positive(config.operatorChatId) || config.ingressPolicy?.requirePrivateChat !== true ||\n    config.ingressPolicy?.requireHumanSender !== true || config.ingressPolicy?.expectedUpdateType !== 'message' ||\n    !Number.isInteger(config.retryPolicy?.stageMaxAttempts) || config.retryPolicy.stageMaxAttempts < 1 ||\n    config.retryPolicy.stageMaxAttempts > 20 || config.retryPolicy.blindWriteRetries !== false) {\n  throw new Error('Ticket intake configuration is unavailable or invalid');\n}\nif (envelope.eligible !== true || envelope.operatorUserId !== config.operatorUserId ||\n    envelope.chatId !== config.operatorChatId || envelope.chatType !== 'private' ||\n    envelope.senderIsBot !== false || !config.ingressPolicy.supportedKinds?.includes(envelope.kind)) {\n  return [{json: {persist: false} }];\n}\nconst policy = {\n  configVersion: config.configVersion,\n  ingressPolicy: config.ingressPolicy,\n  retryPolicy: config.retryPolicy,\n  priorityPolicy: config.priorityPolicy,\n  phase: config.phase\n};\nreturn [{json: {persist: true, queryParameters: [\n  config.botId, envelope.updateId, config.operatorUserId, config.operatorChatId,\n  envelope.messageId, envelope.kind, JSON.stringify(envelope.message), JSON.stringify(policy)\n]} }];"
+      },
+      "id": "ti01-authorize",
+      "name": "Authorize Operator and Prepare Parameters",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ti01-persist-condition",
+              "leftValue": "={{ $json.persist }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ti01-if",
+      "name": "Authorized Supported Message",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ticket_intake.ingest_message($1::bigint, $2::bigint, $3::bigint, $4::bigint, $5::bigint, $6::text, $7::jsonb, $8::jsonb) AS receipt;",
+        "options": {
+          "connectionTimeout": 10,
+          "queryBatching": "single",
+          "queryReplacement": "={{ $json.queryParameters }}"
+        }
+      },
+      "id": "ti01-postgres",
+      "name": "Persist Ingest Message",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "retryOnFail": false,
+      "position": [
+        1200,
+        -112
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json.receipt;\nconst expected = $('Authorize Operator and Prepare Parameters').first().json.queryParameters;\nif (!r || r.found !== true || !r.messageId ||\n    !['accepted', 'duplicate_message', 'duplicate_voice'].includes(r.outcome) ||\n    String(r.updateId) !== expected[1] || String(r.telegramMessageId) !== expected[4]) {\n  throw new Error('Persistence receipt is missing or inconsistent');\n}\nreturn [{json: {ok: true} }];"
+      },
+      "id": "ti01-receipt",
+      "name": "Verify Persistence Receipt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        -128
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"ok\":true}",
+        "options": {
+          "responseCode": 200,
+          "enableStreaming": false
+        }
+      },
+      "id": "ti01-accepted",
+      "name": "Respond Persisted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1680,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"ok\":true}",
+        "options": {
+          "responseCode": 200,
+          "enableStreaming": false
+        }
+      },
+      "id": "ti01-ignored",
+      "name": "Respond Ignored",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1296,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"ok\":false}",
+        "options": {
+          "responseCode": 503,
+          "enableStreaming": false
+        }
+      },
+      "id": "ti01-error",
+      "name": "Respond Unavailable",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1648,
+        368
+      ]
+    }
+  ],
+  "connections": {
+    "Telegram POST Webhook": {
+      "main": [
+        [
+          {
+            "node": "Sanitize Telegram Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sanitize Telegram Update": {
+      "main": [
+        [
+          {
+            "node": "Load TI-00 Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Unavailable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load TI-00 Configuration": {
+      "main": [
+        [
+          {
+            "node": "Authorize Operator and Prepare Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Unavailable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize Operator and Prepare Parameters": {
+      "main": [
+        [
+          {
+            "node": "Authorized Supported Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Unavailable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized Supported Message": {
+      "main": [
+        [
+          {
+            "node": "Persist Ingest Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Ignored",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Ingest Message": {
+      "main": [
+        [
+          {
+            "node": "Verify Persistence Receipt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Unavailable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Persistence Receipt": {
+      "main": [
+        [
+          {
+            "node": "Respond Persisted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Unavailable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": false,
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "timezone": "Europe/Madrid",
+    "executionOrder": "v1"
+  },
+  "active": false
+}

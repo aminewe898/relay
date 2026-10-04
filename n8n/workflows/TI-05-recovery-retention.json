@@ -1,0 +1,155 @@
+{
+  "name": "TI-05 Recovery and Retention",
+  "nodes": [
+    {
+      "id": "ti05-schedule",
+      "name": "Maintenance Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        },
+        "misfirePolicy": "skip"
+      }
+    },
+    {
+      "id": "ti05-config",
+      "name": "Load TI-00 Configuration",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "id"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "ti05-validate",
+      "name": "Validate Maintenance Scope",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const c=$input.first().json;\nconst positive=v=>typeof v==='string'&&/^[1-9][0-9]{0,14}$/.test(v)&&Number.isSafeInteger(Number(v));\nif(typeof c.configVersion!=='string'||!c.configVersion||!positive(c.botId)||!positive(c.operatorUserId)||!positive(c.operatorChatId))throw new Error('maintenance configuration unavailable');\nreturn [{json:{queryParameters:[c.botId,c.operatorUserId,c.operatorChatId,50]} }];"
+      }
+    },
+    {
+      "id": "ti05-maintenance",
+      "name": "Run Bounded Retention and Expiry",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "retryOnFail": false,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ticket_intake.run_backend_maintenance($1::bigint,$2::bigint,$3::bigint,$4::integer) AS receipt;",
+        "options": {
+          "connectionTimeout": 10,
+          "queryBatching": "single",
+          "queryReplacement": "={{ $json.queryParameters }}"
+        }
+      }
+    },
+    {
+      "id": "ti05-receipt",
+      "name": "Verify Safe Maintenance Receipt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const r=$input.first().json.receipt;\nif(!r||!['completed','busy'].includes(r.outcome))throw new Error('maintenance receipt unavailable');\nif(r.outcome==='completed'&&(!Number.isInteger(r.purgedAudio)||r.purgedAudio<0||r.purgedAudio>50||!Number.isInteger(r.expiredInteractions)||r.expiredInteractions<0||r.expiredInteractions>50))throw new Error('maintenance receipt invalid');\nreturn [{json:{outcome:r.outcome,purgedAudio:r.purgedAudio??0,expiredInteractions:r.expiredInteractions??0,at:r.at??null} }];"
+      }
+    }
+  ],
+  "connections": {
+    "Maintenance Schedule": {
+      "main": [
+        [
+          {
+            "node": "Load TI-00 Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load TI-00 Configuration": {
+      "main": [
+        [
+          {
+            "node": "Validate Maintenance Scope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Maintenance Scope": {
+      "main": [
+        [
+          {
+            "node": "Run Bounded Retention and Expiry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Bounded Retention and Expiry": {
+      "main": [
+        [
+          {
+            "node": "Verify Safe Maintenance Receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false,
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "executionTimeout": 60,
+    "timezone": "Europe/Madrid",
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

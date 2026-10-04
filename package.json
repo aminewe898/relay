@@ -1,0 +1,28 @@
+{
+  "name": "relay-workflow-builder",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "start": "node dist/index.js",
+    "start:env": "node --env-file=.env dist/index.js",
+    "test": "tsx --test test/*.test.ts",
+    "test:milestone": "tsx --test test/validator.test.ts test/milestone.test.ts",
+    "check": "npm run typecheck && npm test && npm run test:workflows && npm run build",
+    "test:workflows": "node --test test/workflows/*.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,388 @@
+{
+  "name": "TI-04 Telegram Outbox",
+  "nodes": [
+    {
+      "id": "v1-outbox-0",
+      "name": "Worker Schedule",
+      "notesInFlow": true,
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 15
+            }
+          ]
+        },
+        "misfirePolicy": "skip"
+      }
+    },
+    {
+      "id": "v1-outbox-1",
+      "name": "Load TI-00 Configuration",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "id"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "v1-outbox-2",
+      "name": "Validate Worker Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Pure contracts. Raw Telegram errors/content are never returned from these helpers.\nfunction validateV1Configuration(c) {\n const positive=v=>typeof v==='string'&&/^[1-9][0-9]{0,14}$/.test(v)&&Number.isSafeInteger(Number(v));\n if(!c||typeof c.configVersion!=='string'||!c.configVersion||!positive(c.botId)||!positive(c.operatorUserId)||!positive(c.operatorChatId)||\n   c.ingressPolicy?.requirePrivateChat!==true||c.ingressPolicy?.requireHumanSender!==true||c.retryPolicy?.blindWriteRetries!==false||\n   !Number.isInteger(c.retryPolicy?.stageMaxAttempts)||c.retryPolicy.stageMaxAttempts<1||c.retryPolicy.stageMaxAttempts>20||\n   !['low','normal','high','critical'].includes(c.priorityPolicy?.unknownDefault)||c.priorityPolicy?.criticalRequiresConfirmation!==true)\n   throw new Error('invalid_v1_configuration');\n return {botId:c.botId,operatorUserId:c.operatorUserId,operatorChatId:c.operatorChatId};\n}\nfunction validateV1Claim(r,kind) {\n if(!r||!['claimed','idle','needs_operator'].includes(r.outcome))throw new Error('uncertain_database_result');\n if(r.outcome!=='claimed')return {claimed:false,outcome:r.outcome};\n const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);\n const key=kind==='outbox'?'outboxId':'workId';\n if(!uuid(r[key])||!uuid(r.leaseToken)||!Number.isInteger(r.attemptCount)||r.attemptCount<1||\n   (kind==='work'&&!['resolve_client','operator_reply'].includes(r.stage)))throw new Error('uncertain_database_result');\n return {claimed:true,[key]:r[key],leaseToken:r.leaseToken};\n}\nfunction prepareV1Delivery(r,claim,config) {\n if(r?.outcome!=='dispatch'||r.outboxId!==claim.outboxId||r.leaseToken!==claim.leaseToken||r.chatId!==config.operatorChatId||\n   typeof r.text!=='string'||r.text.length<1||Array.from(r.text).length>3800||typeof r.forceReply!=='boolean')\n   throw new Error('invalid_delivery_contract');\n // Telegram's native node defaults to Markdown. Explicit HTML plus escaping makes\n // extracted/operator text inert and preserves its visible characters.\n return {outboxId:r.outboxId,leaseToken:r.leaseToken,chatId:r.chatId,forceReply:r.forceReply,\n   text:r.text.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')};\n}\nfunction classifyV1Delivery(input,expectedChat) {\n const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);\n const number=v=>typeof v==='string'&&/^[1-5][0-9]{2}$/.test(v)?Number(v):v;\n const retry=v=>Number.isInteger(v)&&v>0?Math.min(3600,v):30;\n // Telegram REST returns {ok:true,result:{message_id,chat} }. No alternative wrapper.\n if(input?.ok===true&&Number.isSafeInteger(input.result?.message_id)&&input.result.message_id>0&&String(input.result.chat?.id)===expectedChat)\n   return {messageId:String(input.result.message_id),classification:null,delaySeconds:30};\n const roots=[input,input?.error,input?.error?.cause,input?.error?.context,input?.error?.response,input?.error?.response?.body,input?.body,input?.response?.body].filter(object);\n let status=null;\n for(const key of ['statusCode','httpCode','status','error_code','code']){\n   for(const r of roots){const s=number(r[key]);if(Number.isInteger(s)&&s>=100&&s<=599){status=s;break;} }\n   if(status!==null)break;\n }\n let classification='delivery_unknown',delaySeconds=30;\n if(status===401||status===403)classification='configuration';\n else if(status===429){classification='rate_limited';delaySeconds=retry(roots.find(r=>r.parameters?.retry_after)?.parameters.retry_after);}\n else if(status>=400&&status<500&&status!==408)classification='permanent_external';\n else if(status>=500&&status<600&&roots.some(r=>r.ok===false))classification='rejected_transient';\n const structured=roots.some(r=>['statusCode','httpCode','status','error_code','code'].some(k=>r[k]!==undefined&&r[k]!==null&&r[k]!==''));\n if(!structured&&typeof input?.error==='string'&&input.error.length<=512){\n   const s=input.error.trim();\n   if(['Unauthorized','Forbidden','Forbidden: bot was blocked by the user','Authorization failed - please check your credentials'].includes(s))classification='configuration';\n   else if(/^Too Many Requests: retry after [1-9][0-9]{0,5}$/.test(s)){classification='rate_limited';delaySeconds=retry(Number(s.split(' ').at(-1)));}\n   else if(['Bad Request: chat not found','Bad Request: message text is empty','Bad Request: message is too long','Bad Request: not enough rights to send text messages to the chat'].includes(s))classification='permanent_external';\n }\n // Network failures, timeouts, missing evidence, malformed success and generic 5xx\n // all have unknown delivery outcome. No automatic resend is safe in these cases.\n return {messageId:null,classification,delaySeconds};\n}\n\nconst config=validateV1Configuration($input.first().json);return [{json:{config,queryParameters:[\"TI-04:\"+String($execution.id),config.botId,config.operatorChatId]} }];"
+      }
+    },
+    {
+      "id": "v1-outbox-3",
+      "name": "Claim One Outbox Message",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "retryOnFail": false,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ticket_intake.claim_v1_outbox($1::text,$2::bigint,$3::bigint) AS receipt;",
+        "options": {
+          "connectionTimeout": 10,
+          "queryBatching": "single",
+          "queryReplacement": "={{ $json.queryParameters }}"
+        }
+      }
+    },
+    {
+      "id": "v1-outbox-4",
+      "name": "Verify Claim",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Pure contracts. Raw Telegram errors/content are never returned from these helpers.\nfunction validateV1Configuration(c) {\n const positive=v=>typeof v==='string'&&/^[1-9][0-9]{0,14}$/.test(v)&&Number.isSafeInteger(Number(v));\n if(!c||typeof c.configVersion!=='string'||!c.configVersion||!positive(c.botId)||!positive(c.operatorUserId)||!positive(c.operatorChatId)||\n   c.ingressPolicy?.requirePrivateChat!==true||c.ingressPolicy?.requireHumanSender!==true||c.retryPolicy?.blindWriteRetries!==false||\n   !Number.isInteger(c.retryPolicy?.stageMaxAttempts)||c.retryPolicy.stageMaxAttempts<1||c.retryPolicy.stageMaxAttempts>20||\n   !['low','normal','high','critical'].includes(c.priorityPolicy?.unknownDefault)||c.priorityPolicy?.criticalRequiresConfirmation!==true)\n   throw new Error('invalid_v1_configuration');\n return {botId:c.botId,operatorUserId:c.operatorUserId,operatorChatId:c.operatorChatId};\n}\nfunction validateV1Claim(r,kind) {\n if(!r||!['claimed','idle','needs_operator'].includes(r.outcome))throw new Error('uncertain_database_result');\n if(r.outcome!=='claimed')return {claimed:false,outcome:r.outcome};\n const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);\n const key=kind==='outbox'?'outboxId':'workId';\n if(!uuid(r[key])||!uuid(r.leaseToken)||!Number.isInteger(r.attemptCount)||r.attemptCount<1||\n   (kind==='work'&&!['resolve_client','operator_reply'].includes(r.stage)))throw new Error('uncertain_database_result');\n return {claimed:true,[key]:r[key],leaseToken:r.leaseToken};\n}\nfunction prepareV1Delivery(r,claim,config) {\n if(r?.outcome!=='dispatch'||r.outboxId!==claim.outboxId||r.leaseToken!==claim.leaseToken||r.chatId!==config.operatorChatId||\n   typeof r.text!=='string'||r.text.length<1||Array.from(r.text).length>3800||typeof r.forceReply!=='boolean')\n   throw new Error('invalid_delivery_contract');\n // Telegram's native node defaults to Markdown. Explicit HTML plus escaping makes\n // extracted/operator text inert and preserves its visible characters.\n return {outboxId:r.outboxId,leaseToken:r.leaseToken,chatId:r.chatId,forceReply:r.forceReply,\n   text:r.text.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')};\n}\nfunction classifyV1Delivery(input,expectedChat) {\n const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);\n const number=v=>typeof v==='string'&&/^[1-5][0-9]{2}$/.test(v)?Number(v):v;\n const retry=v=>Number.isInteger(v)&&v>0?Math.min(3600,v):30;\n // Telegram REST returns {ok:true,result:{message_id,chat} }. No alternative wrapper.\n if(input?.ok===true&&Number.isSafeInteger(input.result?.message_id)&&input.result.message_id>0&&String(input.result.chat?.id)===expectedChat)\n   return {messageId:String(input.result.message_id),classification:null,delaySeconds:30};\n const roots=[input,input?.error,input?.error?.cause,input?.error?.context,input?.error?.response,input?.error?.response?.body,input?.body,input?.response?.body].filter(object);\n let status=null;\n for(const key of ['statusCode','httpCode','status','error_code','code']){\n   for(const r of roots){const s=number(r[key]);if(Number.isInteger(s)&&s>=100&&s<=599){status=s;break;} }\n   if(status!==null)break;\n }\n let classification='delivery_unknown',delaySeconds=30;\n if(status===401||status===403)classification='configuration';\n else if(status===429){classification='rate_limited';delaySeconds=retry(roots.find(r=>r.parameters?.retry_after)?.parameters.retry_after);}\n else if(status>=400&&status<500&&status!==408)classification='permanent_external';\n else if(status>=500&&status<600&&roots.some(r=>r.ok===false))classification='rejected_transient';\n const structured=roots.some(r=>['statusCode','httpCode','status','error_code','code'].some(k=>r[k]!==undefined&&r[k]!==null&&r[k]!==''));\n if(!structured&&typeof input?.error==='string'&&input.error.length<=512){\n   const s=input.error.trim();\n   if(['Unauthorized','Forbidden','Forbidden: bot was blocked by the user','Authorization failed - please check your credentials'].includes(s))classification='configuration';\n   else if(/^Too Many Requests: retry after [1-9][0-9]{0,5}$/.test(s)){classification='rate_limited';delaySeconds=retry(Number(s.split(' ').at(-1)));}\n   else if(['Bad Request: chat not found','Bad Request: message text is empty','Bad Request: message is too long','Bad Request: not enough rights to send text messages to the chat'].includes(s))classification='permanent_external';\n }\n // Network failures, timeouts, missing evidence, malformed success and generic 5xx\n // all have unknown delivery outcome. No automatic resend is safe in these cases.\n return {messageId:null,classification,delaySeconds};\n}\n\nreturn [{json:validateV1Claim($input.first().json.receipt,'outbox')}];"
+      }
+    },
+    {
+      "id": "v1-outbox-5",
+      "name": "Item Claimed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "claimed",
+              "leftValue": "={{ $json.claimed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "v1-outbox-6",
+      "name": "Begin Fenced Delivery",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "retryOnFail": false,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ticket_intake.begin_v1_delivery($1::uuid,$2::uuid) AS receipt;",
+        "options": {
+          "connectionTimeout": 10,
+          "queryBatching": "single",
+          "queryReplacement": "={{ [$json.outboxId,$json.leaseToken] }}"
+        }
+      }
+    },
+    {
+      "id": "v1-outbox-7",
+      "name": "Prepare Safe Telegram Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Pure contracts. Raw Telegram errors/content are never returned from these helpers.\nfunction validateV1Configuration(c) {\n const positive=v=>typeof v==='string'&&/^[1-9][0-9]{0,14}$/.test(v)&&Number.isSafeInteger(Number(v));\n if(!c||typeof c.configVersion!=='string'||!c.configVersion||!positive(c.botId)||!positive(c.operatorUserId)||!positive(c.operatorChatId)||\n   c.ingressPolicy?.requirePrivateChat!==true||c.ingressPolicy?.requireHumanSender!==true||c.retryPolicy?.blindWriteRetries!==false||\n   !Number.isInteger(c.retryPolicy?.stageMaxAttempts)||c.retryPolicy.stageMaxAttempts<1||c.retryPolicy.stageMaxAttempts>20||\n   !['low','normal','high','critical'].includes(c.priorityPolicy?.unknownDefault)||c.priorityPolicy?.criticalRequiresConfirmation!==true)\n   throw new Error('invalid_v1_configuration');\n return {botId:c.botId,operatorUserId:c.operatorUserId,operatorChatId:c.operatorChatId};\n}\nfunction validateV1Claim(r,kind) {\n if(!r||!['claimed','idle','needs_operator'].includes(r.outcome))throw new Error('uncertain_database_result');\n if(r.outcome!=='claimed')return {claimed:false,outcome:r.outcome};\n const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);\n const key=kind==='outbox'?'outboxId':'workId';\n if(!uuid(r[key])||!uuid(r.leaseToken)||!Number.isInteger(r.attemptCount)||r.attemptCount<1||\n   (kind==='work'&&!['resolve_client','operator_reply'].includes(r.stage)))throw new Error('uncertain_database_result');\n return {claimed:true,[key]:r[key],leaseToken:r.leaseToken};\n}\nfunction prepareV1Delivery(r,claim,config) {\n if(r?.outcome!=='dispatch'||r.outboxId!==claim.outboxId||r.leaseToken!==claim.leaseToken||r.chatId!==config.operatorChatId||\n   typeof r.text!=='string'||r.text.length<1||Array.from(r.text).length>3800||typeof r.forceReply!=='boolean')\n   throw new Error('invalid_delivery_contract');\n // Telegram's native node defaults to Markdown. Explicit HTML plus escaping makes\n // extracted/operator text inert and preserves its visible characters.\n return {outboxId:r.outboxId,leaseToken:r.leaseToken,chatId:r.chatId,forceReply:r.forceReply,\n   text:r.text.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')};\n}\nfunction classifyV1Delivery(input,expectedChat) {\n const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);\n const number=v=>typeof v==='string'&&/^[1-5][0-9]{2}$/.test(v)?Number(v):v;\n const retry=v=>Number.isInteger(v)&&v>0?Math.min(3600,v):30;\n // Telegram REST returns {ok:true,result:{message_id,chat} }. No alternative wrapper.\n if(input?.ok===true&&Number.isSafeInteger(input.result?.message_id)&&input.result.message_id>0&&String(input.result.chat?.id)===expectedChat)\n   return {messageId:String(input.result.message_id),classification:null,delaySeconds:30};\n const roots=[input,input?.error,input?.error?.cause,input?.error?.context,input?.error?.response,input?.error?.response?.body,input?.body,input?.response?.body].filter(object);\n let status=null;\n for(const key of ['statusCode','httpCode','status','error_code','code']){\n   for(const r of roots){const s=number(r[key]);if(Number.isInteger(s)&&s>=100&&s<=599){status=s;break;} }\n   if(status!==null)break;\n }\n let classification='delivery_unknown',delaySeconds=30;\n if(status===401||status===403)classification='configuration';\n else if(status===429){classification='rate_limited';delaySeconds=retry(roots.find(r=>r.parameters?.retry_after)?.parameters.retry_after);}\n else if(status>=400&&status<500&&status!==408)classification='permanent_external';\n else if(status>=500&&status<600&&roots.some(r=>r.ok===false))classification='rejected_transient';\n const structured=roots.some(r=>['statusCode','httpCode','status','error_code','code'].some(k=>r[k]!==undefined&&r[k]!==null&&r[k]!==''));\n if(!structured&&typeof input?.error==='string'&&input.error.length<=512){\n   const s=input.error.trim();\n   if(['Unauthorized','Forbidden','Forbidden: bot was blocked by the user','Authorization failed - please check your credentials'].includes(s))classification='configuration';\n   else if(/^Too Many Requests: retry after [1-9][0-9]{0,5}$/.test(s)){classification='rate_limited';delaySeconds=retry(Number(s.split(' ').at(-1)));}\n   else if(['Bad Request: chat not found','Bad Request: message text is empty','Bad Request: message is too long','Bad Request: not enough rights to send text messages to the chat'].includes(s))classification='permanent_external';\n }\n // Network failures, timeouts, missing evidence, malformed success and generic 5xx\n // all have unknown delivery outcome. No automatic resend is safe in these cases.\n return {messageId:null,classification,delaySeconds};\n}\n\nreturn [{json:prepareV1Delivery($input.first().json.receipt,$('Verify Claim').first().json,$('Validate Worker Configuration').first().json.config)}];"
+      }
+    },
+    {
+      "id": "v1-outbox-8",
+      "name": "Send One Outbox Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "retryOnFail": false,
+      "onError": "continueErrorOutput",
+      "position": [
+        1920,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "replyMarkup": "={{ $json.forceReply ? 'forceReply' : 'none' }}",
+        "forceReply": {
+          "force_reply": true,
+          "selective": false
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      }
+    },
+    {
+      "id": "v1-outbox-9",
+      "name": "Sanitize Delivery Receipt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Pure contracts. Raw Telegram errors/content are never returned from these helpers.\nfunction validateV1Configuration(c) {\n const positive=v=>typeof v==='string'&&/^[1-9][0-9]{0,14}$/.test(v)&&Number.isSafeInteger(Number(v));\n if(!c||typeof c.configVersion!=='string'||!c.configVersion||!positive(c.botId)||!positive(c.operatorUserId)||!positive(c.operatorChatId)||\n   c.ingressPolicy?.requirePrivateChat!==true||c.ingressPolicy?.requireHumanSender!==true||c.retryPolicy?.blindWriteRetries!==false||\n   !Number.isInteger(c.retryPolicy?.stageMaxAttempts)||c.retryPolicy.stageMaxAttempts<1||c.retryPolicy.stageMaxAttempts>20||\n   !['low','normal','high','critical'].includes(c.priorityPolicy?.unknownDefault)||c.priorityPolicy?.criticalRequiresConfirmation!==true)\n   throw new Error('invalid_v1_configuration');\n return {botId:c.botId,operatorUserId:c.operatorUserId,operatorChatId:c.operatorChatId};\n}\nfunction validateV1Claim(r,kind) {\n if(!r||!['claimed','idle','needs_operator'].includes(r.outcome))throw new Error('uncertain_database_result');\n if(r.outcome!=='claimed')return {claimed:false,outcome:r.outcome};\n const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);\n const key=kind==='outbox'?'outboxId':'workId';\n if(!uuid(r[key])||!uuid(r.leaseToken)||!Number.isInteger(r.attemptCount)||r.attemptCount<1||\n   (kind==='work'&&!['resolve_client','operator_reply'].includes(r.stage)))throw new Error('uncertain_database_result');\n return {claimed:true,[key]:r[key],leaseToken:r.leaseToken};\n}\nfunction prepareV1Delivery(r,claim,config) {\n if(r?.outcome!=='dispatch'||r.outboxId!==claim.outboxId||r.leaseToken!==claim.leaseToken||r.chatId!==config.operatorChatId||\n   typeof r.text!=='string'||r.text.length<1||Array.from(r.text).length>3800||typeof r.forceReply!=='boolean')\n   throw new Error('invalid_delivery_contract');\n // Telegram's native node defaults to Markdown. Explicit HTML plus escaping makes\n // extracted/operator text inert and preserves its visible characters.\n return {outboxId:r.outboxId,leaseToken:r.leaseToken,chatId:r.chatId,forceReply:r.forceReply,\n   text:r.text.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')};\n}\nfunction classifyV1Delivery(input,expectedChat) {\n const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);\n const number=v=>typeof v==='string'&&/^[1-5][0-9]{2}$/.test(v)?Number(v):v;\n const retry=v=>Number.isInteger(v)&&v>0?Math.min(3600,v):30;\n // Telegram REST returns {ok:true,result:{message_id,chat} }. No alternative wrapper.\n if(input?.ok===true&&Number.isSafeInteger(input.result?.message_id)&&input.result.message_id>0&&String(input.result.chat?.id)===expectedChat)\n   return {messageId:String(input.result.message_id),classification:null,delaySeconds:30};\n const roots=[input,input?.error,input?.error?.cause,input?.error?.context,input?.error?.response,input?.error?.response?.body,input?.body,input?.response?.body].filter(object);\n let status=null;\n for(const key of ['statusCode','httpCode','status','error_code','code']){\n   for(const r of roots){const s=number(r[key]);if(Number.isInteger(s)&&s>=100&&s<=599){status=s;break;} }\n   if(status!==null)break;\n }\n let classification='delivery_unknown',delaySeconds=30;\n if(status===401||status===403)classification='configuration';\n else if(status===429){classification='rate_limited';delaySeconds=retry(roots.find(r=>r.parameters?.retry_after)?.parameters.retry_after);}\n else if(status>=400&&status<500&&status!==408)classification='permanent_external';\n else if(status>=500&&status<600&&roots.some(r=>r.ok===false))classification='rejected_transient';\n const structured=roots.some(r=>['statusCode','httpCode','status','error_code','code'].some(k=>r[k]!==undefined&&r[k]!==null&&r[k]!==''));\n if(!structured&&typeof input?.error==='string'&&input.error.length<=512){\n   const s=input.error.trim();\n   if(['Unauthorized','Forbidden','Forbidden: bot was blocked by the user','Authorization failed - please check your credentials'].includes(s))classification='configuration';\n   else if(/^Too Many Requests: retry after [1-9][0-9]{0,5}$/.test(s)){classification='rate_limited';delaySeconds=retry(Number(s.split(' ').at(-1)));}\n   else if(['Bad Request: chat not found','Bad Request: message text is empty','Bad Request: message is too long','Bad Request: not enough rights to send text messages to the chat'].includes(s))classification='permanent_external';\n }\n // Network failures, timeouts, missing evidence, malformed success and generic 5xx\n // all have unknown delivery outcome. No automatic resend is safe in these cases.\n return {messageId:null,classification,delaySeconds};\n}\n\nconst claim=$('Verify Claim').first().json,chat=$('Validate Worker Configuration').first().json.config.operatorChatId;const result=classifyV1Delivery($input.first().json,chat);return [{json:{outboxId:claim.outboxId,leaseToken:claim.leaseToken,...result} }];"
+      }
+    },
+    {
+      "id": "v1-outbox-10",
+      "name": "Persist Fenced Delivery Receipt",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "retryOnFail": false,
+      "position": [
+        2400,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ticket_intake.finish_v1_delivery($1::uuid,$2::uuid,$3::bigint,$4::text,$5::integer) AS receipt;",
+        "options": {
+          "connectionTimeout": 10,
+          "queryBatching": "single",
+          "queryReplacement": "={{ [$json.outboxId,$json.leaseToken,$json.messageId,$json.classification,$json.delaySeconds] }}"
+        }
+      }
+    },
+    {
+      "id": "v1-outbox-11",
+      "name": "Verify Delivery Persistence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Pure contracts. Raw Telegram errors/content are never returned from these helpers.\nfunction validateV1Configuration(c) {\n const positive=v=>typeof v==='string'&&/^[1-9][0-9]{0,14}$/.test(v)&&Number.isSafeInteger(Number(v));\n if(!c||typeof c.configVersion!=='string'||!c.configVersion||!positive(c.botId)||!positive(c.operatorUserId)||!positive(c.operatorChatId)||\n   c.ingressPolicy?.requirePrivateChat!==true||c.ingressPolicy?.requireHumanSender!==true||c.retryPolicy?.blindWriteRetries!==false||\n   !Number.isInteger(c.retryPolicy?.stageMaxAttempts)||c.retryPolicy.stageMaxAttempts<1||c.retryPolicy.stageMaxAttempts>20||\n   !['low','normal','high','critical'].includes(c.priorityPolicy?.unknownDefault)||c.priorityPolicy?.criticalRequiresConfirmation!==true)\n   throw new Error('invalid_v1_configuration');\n return {botId:c.botId,operatorUserId:c.operatorUserId,operatorChatId:c.operatorChatId};\n}\nfunction validateV1Claim(r,kind) {\n if(!r||!['claimed','idle','needs_operator'].includes(r.outcome))throw new Error('uncertain_database_result');\n if(r.outcome!=='claimed')return {claimed:false,outcome:r.outcome};\n const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);\n const key=kind==='outbox'?'outboxId':'workId';\n if(!uuid(r[key])||!uuid(r.leaseToken)||!Number.isInteger(r.attemptCount)||r.attemptCount<1||\n   (kind==='work'&&!['resolve_client','operator_reply'].includes(r.stage)))throw new Error('uncertain_database_result');\n return {claimed:true,[key]:r[key],leaseToken:r.leaseToken};\n}\nfunction prepareV1Delivery(r,claim,config) {\n if(r?.outcome!=='dispatch'||r.outboxId!==claim.outboxId||r.leaseToken!==claim.leaseToken||r.chatId!==config.operatorChatId||\n   typeof r.text!=='string'||r.text.length<1||Array.from(r.text).length>3800||typeof r.forceReply!=='boolean')\n   throw new Error('invalid_delivery_contract');\n // Telegram's native node defaults to Markdown. Explicit HTML plus escaping makes\n // extracted/operator text inert and preserves its visible characters.\n return {outboxId:r.outboxId,leaseToken:r.leaseToken,chatId:r.chatId,forceReply:r.forceReply,\n   text:r.text.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')};\n}\nfunction classifyV1Delivery(input,expectedChat) {\n const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);\n const number=v=>typeof v==='string'&&/^[1-5][0-9]{2}$/.test(v)?Number(v):v;\n const retry=v=>Number.isInteger(v)&&v>0?Math.min(3600,v):30;\n // Telegram REST returns {ok:true,result:{message_id,chat} }. No alternative wrapper.\n if(input?.ok===true&&Number.isSafeInteger(input.result?.message_id)&&input.result.message_id>0&&String(input.result.chat?.id)===expectedChat)\n   return {messageId:String(input.result.message_id),classification:null,delaySeconds:30};\n const roots=[input,input?.error,input?.error?.cause,input?.error?.context,input?.error?.response,input?.error?.response?.body,input?.body,input?.response?.body].filter(object);\n let status=null;\n for(const key of ['statusCode','httpCode','status','error_code','code']){\n   for(const r of roots){const s=number(r[key]);if(Number.isInteger(s)&&s>=100&&s<=599){status=s;break;} }\n   if(status!==null)break;\n }\n let classification='delivery_unknown',delaySeconds=30;\n if(status===401||status===403)classification='configuration';\n else if(status===429){classification='rate_limited';delaySeconds=retry(roots.find(r=>r.parameters?.retry_after)?.parameters.retry_after);}\n else if(status>=400&&status<500&&status!==408)classification='permanent_external';\n else if(status>=500&&status<600&&roots.some(r=>r.ok===false))classification='rejected_transient';\n const structured=roots.some(r=>['statusCode','httpCode','status','error_code','code'].some(k=>r[k]!==undefined&&r[k]!==null&&r[k]!==''));\n if(!structured&&typeof input?.error==='string'&&input.error.length<=512){\n   const s=input.error.trim();\n   if(['Unauthorized','Forbidden','Forbidden: bot was blocked by the user','Authorization failed - please check your credentials'].includes(s))classification='configuration';\n   else if(/^Too Many Requests: retry after [1-9][0-9]{0,5}$/.test(s)){classification='rate_limited';delaySeconds=retry(Number(s.split(' ').at(-1)));}\n   else if(['Bad Request: chat not found','Bad Request: message text is empty','Bad Request: message is too long','Bad Request: not enough rights to send text messages to the chat'].includes(s))classification='permanent_external';\n }\n // Network failures, timeouts, missing evidence, malformed success and generic 5xx\n // all have unknown delivery outcome. No automatic resend is safe in these cases.\n return {messageId:null,classification,delaySeconds};\n}\n\nconst r=$input.first().json.receipt,c=$('Verify Claim').first().json;if(!r||r.outboxId!==c.outboxId||!['sent','already_applied','queued','uncertain','needs_operator'].includes(r.outcome))throw new Error('uncertain_database_result');return [{json:{outcome:r.outcome,outboxId:r.outboxId} }];"
+      }
+    }
+  ],
+  "connections": {
+    "Worker Schedule": {
+      "main": [
+        [
+          {
+            "node": "Load TI-00 Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load TI-00 Configuration": {
+      "main": [
+        [
+          {
+            "node": "Validate Worker Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Worker Configuration": {
+      "main": [
+        [
+          {
+            "node": "Claim One Outbox Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim One Outbox Message": {
+      "main": [
+        [
+          {
+            "node": "Verify Claim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Claim": {
+      "main": [
+        [
+          {
+            "node": "Item Claimed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Item Claimed?": {
+      "main": [
+        [
+          {
+            "node": "Begin Fenced Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Begin Fenced Delivery": {
+      "main": [
+        [
+          {
+            "node": "Prepare Safe Telegram Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Safe Telegram Message": {
+      "main": [
+        [
+          {
+            "node": "Send One Outbox Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send One Outbox Message": {
+      "main": [
+        [
+          {
+            "node": "Sanitize Delivery Receipt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sanitize Delivery Receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sanitize Delivery Receipt": {
+      "main": [
+        [
+          {
+            "node": "Persist Fenced Delivery Receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Fenced Delivery Receipt": {
+      "main": [
+        [
+          {
+            "node": "Verify Delivery Persistence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false,
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "executionTimeout": 120,
+    "timezone": "Europe/Madrid",
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

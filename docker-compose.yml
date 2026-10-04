@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: postgres:18.6-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-relay_bootstrap}
+      POSTGRES_DB: ${POSTGRES_DB:-ticket_system}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configure POSTGRES_PASSWORD}
+      TICKET_RUNTIME_PASSWORD: ${TICKET_RUNTIME_PASSWORD:?Configure runtime password}
+      RELAY_READER_PASSWORD: ${RELAY_READER_PASSWORD:?Configure reader password}
+      AUDIO_RETENTION_HOURS: ${AUDIO_RETENTION_HOURS:-72}
+      INTERACTION_EXPIRY_HOURS: ${INTERACTION_EXPIRY_HOURS:-48}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./database:/opt/relay/database:ro
+      - ./database/bootstrap.sh:/docker-entrypoint-initdb.d/10-relay.sh:ro
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" && psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atc "SELECT count(*)=6 FROM ticket_intake.migration_history" | grep -qx t']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.40.5
+    restart: unless-stopped
+    ports: ["127.0.0.1:${N8N_PORT:-5678}:5678"]
+    environment:
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Configure encryption key}
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      EXECUTIONS_DATA_SAVE_ON_ERROR: none
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: none
+      EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "false"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/opt/relay/workflows:ro
+    networks: [database, egress]
+    depends_on:
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:5678/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  relay-web:
+    build: ./frontend
+    restart: unless-stopped
+    ports: ["127.0.0.1:${APP_PORT:-3100}:3100"]
+    environment:
+      SERVICE_DESK_MODE: live
+      SERVICE_DESK_TRANSPORT: pg
+      SERVICE_DESK_DATABASE_URL: ${SERVICE_DESK_DATABASE_URL:?Configure reader URL}
+      SERVICE_DESK_AUTH_USER: ${SERVICE_DESK_AUTH_USER:?Configure console user}
+      SERVICE_DESK_AUTH_PASSWORD: ${SERVICE_DESK_AUTH_PASSWORD:?Configure console password}
+    networks: [database, egress]
+    depends_on:
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3100/').then(r=>process.exit(r.status===401?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+volumes:
+  postgres_data:
+  n8n_data:
+networks:
+  database: {internal: true}
+  egress:

@@ -1,0 +1,15 @@
+\getenv runtime_password TICKET_RUNTIME_PASSWORD
+\getenv reader_password RELAY_READER_PASSWORD
+CREATE ROLE ticket_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+CREATE ROLE ticket_n8n LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 10;
+CREATE ROLE ticket_backend_read NOLOGIN;
+CREATE ROLE ticket_backend_admin NOLOGIN;
+CREATE ROLE relay_reader LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 5;
+SELECT format('ALTER ROLE ticket_n8n PASSWORD %L', :'runtime_password') \gexec
+SELECT format('ALTER ROLE relay_reader PASSWORD %L', :'reader_password') \gexec
+ALTER DATABASE ticket_system OWNER TO ticket_owner;
+REVOKE ALL ON DATABASE ticket_system FROM PUBLIC;
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+ALTER ROLE relay_reader SET default_transaction_read_only=on;
+ALTER ROLE relay_reader SET statement_timeout='5s';
+ALTER ROLE ticket_n8n SET statement_timeout='15s';

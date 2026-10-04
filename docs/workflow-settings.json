@@ -1,0 +1,86 @@
+[
+  {
+    "workflow": "TI-00 Configuration",
+    "schedules": []
+  },
+  {
+    "workflow": "TI-01 Telegram Ingress",
+    "schedules": []
+  },
+  {
+    "workflow": "TI-02 Intake Worker",
+    "schedules": [
+      {
+        "node": "Worker Schedule",
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "seconds",
+                "secondsInterval": 15
+              }
+            ]
+          },
+          "misfirePolicy": "skip"
+        }
+      }
+    ]
+  },
+  {
+    "workflow": "TI-03 Operator Reply / Client Resolution Worker",
+    "schedules": [
+      {
+        "node": "Worker Schedule",
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "seconds",
+                "secondsInterval": 15
+              }
+            ]
+          },
+          "misfirePolicy": "skip"
+        }
+      }
+    ]
+  },
+  {
+    "workflow": "TI-04 Telegram Outbox",
+    "schedules": [
+      {
+        "node": "Worker Schedule",
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "seconds",
+                "secondsInterval": 15
+              }
+            ]
+          },
+          "misfirePolicy": "skip"
+        }
+      }
+    ]
+  },
+  {
+    "workflow": "TI-05 Recovery and Retention",
+    "schedules": [
+      {
+        "node": "Maintenance Schedule",
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 1
+              }
+            ]
+          },
+          "misfirePolicy": "skip"
+        }
+      }
+    ]
+  }
+]
