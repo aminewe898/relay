@@ -1,6 +1,6 @@
 # Relay v1.0.0 candidate: release engineering report
 
-Date: 2026-10-04 (Europe/Madrid). **NO-GO for public push.** This candidate is ready for operator review; license selection and original-history provenance remain unresolved. No tag, public repository or push was created.
+Date: 2026-10-04 (Europe/Madrid). **NO-GO for public push.** Historical packaging report. Apache-2.0 and intentional sanitized-history provenance are now resolved. See [final pre-public report](final-pre-public-report.md) for current checks and remaining operator gates. The repository is private; no tag or GitHub Release exists.
 
 ## A. Final repository tree
 
@@ -33,9 +33,7 @@ All are excluded. The generic API-key candidate requires private operator review
 
 ## E. Git-history scan
 
-Original workspace: **no .git repository**. No previous refs or remote history were available. Complete historical certification is unavailable; this is a release gate, not a clean-history claim. Gitleaks scanned all refs of the newly generated disposable sanitized Git snapshot with **0 findings**. That does not certify earlier development history.
-
-If earlier commits exist, obtain that repository, scan all refs, privately identify affected credential categories, coordinate operator-approved rotation/revocation if exposed, sanitize affected historical refs before public publication, and rescan. Never rewrite or push remote history automatically.
+The release intentionally uses a new sanitized history rooted at parentless commit `7a044cf9423ae9ef908a0360fdf07e14136d4872`, produced from the verified release candidate. It does not preserve or import private development history, which may remain private. The release graph and all release refs are scanned independently. This provenance gate is PASS. Historical credential remediation in private development remains a separate operator responsibility; it is not a requirement to import private history.
 
 ## F. Docker clean install
 

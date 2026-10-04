@@ -1,134 +1,136 @@
-relay/
-  .env.example
-  .gitattributes
-  .gitignore
-  .gitleaks.toml
-  AGENTS.md
-  CHANGELOG.md
-  CONTRIBUTING.md
-  database/bootstrap.sh
-  database/migrations/001_schema.sql
-  database/migrations/002_phase1_operations.sql
-  database/migrations/003_grants.sql
-  database/migrations/004_phase2a_worker.proposed.sql
-  database/migrations/005_v1_completion.sql
-  database/migrations/006_backend_hardening.sql
-  database/migrations/checksums.json
-  database/reader.sql
-  database/roles.sql
-  database/test-capabilities.sql
-  docker-compose.yml
-  docs/architecture.md
-  docs/artifact-classification.md
-  docs/backup-restore.md
-  docs/configuration.md
-  docs/development.md
-  docs/github-presentation.md
-  docs/installation.md
-  docs/migration-center.md
-  docs/n8n-setup.md
-  docs/release-checklist.md
-  docs/release-report.md
-  docs/repository-tree.txt
-  docs/security.md
-  docs/telegram-setup.md
-  docs/troubleshooting.md
-  docs/workflow-settings.json
-  examples/codex-mcp-test.json
-  examples/manual-workflow.json
-  frontend/.dockerignore
-  frontend/AGENTS.md
-  frontend/app/[[...path]]/page.tsx
-  frontend/app/api/v1/[...resource]/route.ts
-  frontend/app/api/v1/snapshot/route.ts
-  frontend/app/error.tsx
-  frontend/app/globals.css
-  frontend/app/layout.tsx
-  frontend/app/loading.tsx
-  frontend/app/not-found.tsx
-  frontend/components/automation/automations.tsx
-  frontend/components/command/command-center.tsx
-  frontend/components/customer/customers.tsx
-  frontend/components/primitives.tsx
-  frontend/components/shell/app-shell.tsx
-  frontend/components/shell/icon.tsx
-  frontend/components/tables/tickets.tsx
-  frontend/components/ticket/workspace.tsx
-  frontend/components/workspace.tsx
-  frontend/Dockerfile
-  frontend/lib/api/docker-reader.ts
-  frontend/lib/api/projections.ts
-  frontend/lib/api/response.ts
-  frontend/lib/api/service.ts
-  frontend/lib/api/sql.ts
-  frontend/lib/auth.ts
-  frontend/lib/data.ts
-  frontend/lib/model.ts
-  frontend/lib/queries.ts
-  frontend/lib/reader.ts
-  frontend/next-env.d.ts
-  frontend/next.config.ts
-  frontend/package-lock.json
-  frontend/package.json
-  frontend/proxy.ts
-  frontend/README.md
-  frontend/test/core.test.ts
-  frontend/test/fixtures.ts
-  frontend/test/smoke.mjs
-  frontend/tsconfig.json
-  n8n/credential-bindings.json
-  n8n/workflows/TI-00-configuration.json
-  n8n/workflows/TI-01-telegram-ingress.json
-  n8n/workflows/TI-02-intake-worker.json
-  n8n/workflows/TI-03-client-resolution.json
-  n8n/workflows/TI-04-telegram-outbox.json
-  n8n/workflows/TI-05-recovery-retention.json
-  package-lock.json
-  package.json
-  README.md
-  scripts/backup.ps1
-  scripts/backup.sh
-  scripts/clean-install-test.py
-  scripts/migrate.ps1
-  scripts/migrate.sh
-  scripts/n8n-state-rehearsal.py
-  scripts/ops.mjs
-  scripts/restore.ps1
-  scripts/restore.sh
-  scripts/setup.ps1
-  scripts/setup.sh
-  scripts/verify-installation.ps1
-  scripts/verify-installation.sh
-  SECURITY.md
-  src/config.ts
-  src/diagnostics/execution.ts
-  src/diagnostics/sanitizer.ts
-  src/index.ts
-  src/n8n/client.ts
-  src/n8n/types.ts
-  src/security.ts
-  src/server.ts
-  src/tools/service.ts
-  src/tools/workflow-diff.ts
-  src/validation/workflow-validator.ts
-  test/client.test.ts
-  test/database-isolated.mjs
-  test/diagnostics.test.ts
-  test/diff.test.ts
-  test/fixtures/executions.ts
-  test/helpers.ts
-  test/milestone.test.ts
-  test/repair.test.ts
-  test/security.test.ts
-  test/stdio.test.ts
-  test/validator.test.ts
-  test/workflows/phase2a-classifier.mjs
-  test/workflows/phase2a-classifier.test.mjs
-  test/workflows/phase2a-validators.mjs
-  test/workflows/phase2a-validators.test.mjs
-  test/workflows/v1-workflow-contracts.mjs
-  test/workflows/v1-workflow-contracts.test.mjs
-  test/writes.test.ts
-  tsconfig.json
-  tsconfig.test.json
-  VERSION
+.env.example
+.gitattributes
+.gitignore
+.gitleaks.toml
+AGENTS.md
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSE
+README.md
+SECURITY.md
+VERSION
+database/bootstrap.sh
+database/migrations/001_schema.sql
+database/migrations/002_phase1_operations.sql
+database/migrations/003_grants.sql
+database/migrations/004_phase2a_worker.proposed.sql
+database/migrations/005_v1_completion.sql
+database/migrations/006_backend_hardening.sql
+database/migrations/checksums.json
+database/reader.sql
+database/roles.sql
+database/test-capabilities.sql
+docker-compose.yml
+docs/architecture.md
+docs/artifact-classification.md
+docs/backup-restore.md
+docs/configuration.md
+docs/development.md
+docs/final-pre-public-report.md
+docs/github-presentation.md
+docs/installation.md
+docs/manual-acceptance.md
+docs/migration-center.md
+docs/n8n-setup.md
+docs/release-checklist.md
+docs/release-report.md
+docs/repository-tree.txt
+docs/security.md
+docs/telegram-setup.md
+docs/troubleshooting.md
+docs/workflow-settings.json
+examples/codex-mcp-test.json
+examples/manual-workflow.json
+frontend/.dockerignore
+frontend/AGENTS.md
+frontend/Dockerfile
+frontend/README.md
+frontend/app/[[...path]]/page.tsx
+frontend/app/api/v1/[...resource]/route.ts
+frontend/app/api/v1/snapshot/route.ts
+frontend/app/error.tsx
+frontend/app/globals.css
+frontend/app/layout.tsx
+frontend/app/loading.tsx
+frontend/app/not-found.tsx
+frontend/components/automation/automations.tsx
+frontend/components/command/command-center.tsx
+frontend/components/customer/customers.tsx
+frontend/components/primitives.tsx
+frontend/components/shell/app-shell.tsx
+frontend/components/shell/icon.tsx
+frontend/components/tables/tickets.tsx
+frontend/components/ticket/workspace.tsx
+frontend/components/workspace.tsx
+frontend/lib/api/docker-reader.ts
+frontend/lib/api/projections.ts
+frontend/lib/api/response.ts
+frontend/lib/api/service.ts
+frontend/lib/api/sql.ts
+frontend/lib/auth.ts
+frontend/lib/data.ts
+frontend/lib/model.ts
+frontend/lib/queries.ts
+frontend/lib/reader.ts
+frontend/next-env.d.ts
+frontend/next.config.ts
+frontend/package-lock.json
+frontend/package.json
+frontend/proxy.ts
+frontend/test/core.test.ts
+frontend/test/fixtures.ts
+frontend/test/smoke.mjs
+frontend/tsconfig.json
+n8n/credential-bindings.json
+n8n/workflows/TI-00-configuration.json
+n8n/workflows/TI-01-telegram-ingress.json
+n8n/workflows/TI-02-intake-worker.json
+n8n/workflows/TI-03-client-resolution.json
+n8n/workflows/TI-04-telegram-outbox.json
+n8n/workflows/TI-05-recovery-retention.json
+package-lock.json
+package.json
+scripts/backup.ps1
+scripts/backup.sh
+scripts/clean-install-test.py
+scripts/migrate.ps1
+scripts/migrate.sh
+scripts/n8n-state-rehearsal.py
+scripts/ops.mjs
+scripts/restore.ps1
+scripts/restore.sh
+scripts/setup.ps1
+scripts/setup.sh
+scripts/verify-installation.ps1
+scripts/verify-installation.sh
+src/config.ts
+src/diagnostics/execution.ts
+src/diagnostics/sanitizer.ts
+src/index.ts
+src/n8n/client.ts
+src/n8n/types.ts
+src/security.ts
+src/server.ts
+src/tools/service.ts
+src/tools/workflow-diff.ts
+src/validation/workflow-validator.ts
+test/client.test.ts
+test/database-isolated.mjs
+test/diagnostics.test.ts
+test/diff.test.ts
+test/fixtures/executions.ts
+test/helpers.ts
+test/milestone.test.ts
+test/repair.test.ts
+test/security.test.ts
+test/stdio.test.ts
+test/validator.test.ts
+test/workflows/phase2a-classifier.mjs
+test/workflows/phase2a-classifier.test.mjs
+test/workflows/phase2a-validators.mjs
+test/workflows/phase2a-validators.test.mjs
+test/workflows/v1-workflow-contracts.mjs
+test/workflows/v1-workflow-contracts.test.mjs
+test/writes.test.ts
+tsconfig.json
+tsconfig.test.json
