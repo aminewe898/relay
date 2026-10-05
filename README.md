@@ -77,3 +77,7 @@ Future work may include multi-user authorization, ticket mutations, assets and r
 ## License
 
 Relay is licensed under [Apache-2.0](LICENSE). n8n and other dependencies retain their own licenses; Relay's license does not relicense them.
+
+## Verification evidence
+
+See [portfolio validation](docs/PORTFOLIO_VALIDATION.md) for checks performed and explicit limits.
