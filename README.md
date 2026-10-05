@@ -2,7 +2,7 @@
 
 AI-native IT service operations: turn an authorized Telegram voice message into a durable, structured support ticket.
 
-Relay combines PostgreSQL-backed n8n workers, Groq transcription and extraction, deterministic customer resolution, and a read-only operational web console. The proposed product release is **v1.0.0**. Public release is pending the gates in [the release checklist](docs/release-checklist.md).
+Relay combines PostgreSQL-backed n8n workers, Groq transcription and extraction, deterministic customer resolution, and a read-only operational web console. **[v1.0.0 is released](https://github.com/aminewe898/relay/releases/tag/v1.0.0)**. Fresh packaged provider acceptance was explicitly deferred; review the release entry and [the release checklist](docs/release-checklist.md) for the accepted limits and deployment responsibilities.
 
 ## How it works
 
@@ -81,3 +81,4 @@ Relay is licensed under [Apache-2.0](LICENSE). n8n and other dependencies retain
 ## Verification evidence
 
 See [portfolio validation](docs/PORTFOLIO_VALIDATION.md) for checks performed and explicit limits.
+
